@@ -1,8 +1,8 @@
-# SCB & E-hälsomyndigheten MCP Server (HTTP Version)
+# SCB MCP Server (HTTP Version)
 
 **✅ FIXED: OAuth/Initialize Error** - This HTTP version includes full MCP protocol support with `initialize` and `initialized` methods, fixing the error that prevented Claude Code from connecting.
 
-A Model Context Protocol (MCP) server providing access to Statistics Sweden's (SCB) PX-Web API v2 and E-hälsomyndigheten medicine data via HTTP transport.
+A Model Context Protocol (MCP) server providing access to Statistics Sweden's (SCB) PX-Web API v2 via HTTP transport.
 
 ## 🚀 Quick Deploy to Fix Your Server
 

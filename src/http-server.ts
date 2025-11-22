@@ -20,8 +20,8 @@ app.use(express.json());
 // Create MCP server instance
 const server = new Server(
   {
-    name: 'SCB & E-hälsomyndigheten Statistics Server',
-    version: '2.1.0',
+    name: 'SCB Statistics Server',
+    version: '2.2.0',
   },
   {
     capabilities: {
@@ -48,9 +48,9 @@ server.setRequestHandler(CallToolRequestSchema, async (request) => {
 app.get('/mcp', (req, res) => {
   res.json({
     protocol: 'mcp',
-    version: '2.1.0',
-    name: 'SCB & E-hälsomyndigheten Statistics Server',
-    description: 'Swedish statistics and medicine data via MCP protocol',
+    version: '2.2.0',
+    name: 'SCB Statistics Server',
+    description: 'Swedish statistics data via MCP protocol',
     authentication: 'none',
     transport: 'http',
     capabilities: {
@@ -58,7 +58,7 @@ app.get('/mcp', (req, res) => {
       resources: false,
       prompts: false,
     },
-    tools: 14,
+    tools: 11,
     connection: {
       method: 'POST',
       endpoint: '/mcp',
@@ -95,8 +95,8 @@ app.post('/mcp', async (req, res) => {
             tools: {},
           },
           serverInfo: {
-            name: 'SCB & E-hälsomyndigheten Statistics Server',
-            version: '2.1.0',
+            name: 'SCB Statistics Server',
+            version: '2.2.0',
           },
         },
       });
@@ -390,76 +390,6 @@ function getTools(): Tool[] {
             default: 'en',
           },
         },
-      },
-    },
-    {
-      name: 'ehealth_search_tables',
-      description: 'Search medicine statistics tables',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          database: {
-            type: 'string',
-            default: 'Detaljhandel med läkemedel',
-          },
-          language: {
-            type: 'string',
-            default: 'sv',
-          },
-        },
-      },
-    },
-    {
-      name: 'ehealth_get_table_info',
-      description: 'Get medicine table information',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          tableId: {
-            type: 'string',
-            description: 'Table ID (e.g., LM1001)',
-          },
-          database: {
-            type: 'string',
-            default: 'Detaljhandel med läkemedel',
-          },
-          language: {
-            type: 'string',
-            default: 'sv',
-          },
-        },
-        required: ['tableId'],
-      },
-    },
-    {
-      name: 'ehealth_get_medicine_data',
-      description: 'Get medicine statistics data',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          tableId: {
-            type: 'string',
-          },
-          selection: {
-            type: 'object',
-            description: 'Variable selection (försäljningssätt, varugrupp, period, mätvärde)',
-            additionalProperties: {
-              type: 'array',
-              items: {
-                type: 'string',
-              },
-            },
-          },
-          database: {
-            type: 'string',
-            default: 'Detaljhandel med läkemedel',
-          },
-          language: {
-            type: 'string',
-            default: 'sv',
-          },
-        },
-        required: ['tableId', 'selection'],
       },
     },
   ];
