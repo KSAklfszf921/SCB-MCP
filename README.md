@@ -64,6 +64,31 @@ Lägg till i din Claude Desktop-konfiguration:
 claude mcp add --transport http scb-statistics https://scb-mcp-http.onrender.com/mcp
 ```
 
+### Lokal MCP (stdio)
+
+Kör servern lokalt via stdio-transport efter build:
+
+```bash
+npm install
+npm run build
+npm run start:stdio
+```
+
+Exempel på Claude Desktop-konfiguration för lokal stdio-server:
+
+```json
+{
+  "mcpServers": {
+    "scb-statistics-local": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/full/path/till/dist/index.js"],
+      "description": "Lokalt SCB MCP-server (stdio)"
+    }
+  }
+}
+```
+
 ### Med andra MCP-klienter
 
 Servern är tillgänglig via HTTP på:
@@ -154,14 +179,26 @@ Detta genererar en strukturerad guide som använder flera verktyg för att analy
 
 ## Deployment
 
-### Render
+### Render (Docker)
 
-1. Skapa ny Web Service på [render.com](https://render.com)
-2. Koppla till GitHub-repot
-3. Konfigurera:
-   - **Build Command**: `npm install && npm run build`
-   - **Start Command**: `npm start`
-   - **Environment**: Node
+Render-deploymenten använder en Dockerfile för att säkerställa en konsekvent bygg- och körmiljö för både lokalt bruk och den publicerade MCP-URL:en `https://scb-mcp.onrender.com/mcp`.
+
+**Viktigt:** Om Render-loggen visar att den “Requesting Node.js version ...” bygger tjänsten inte från Dockerfilen.
+
+1. Skapa eller redeploya **alltid** via Blueprint-läget: [Deploy to Render](https://dashboard.render.com/blueprints) → välj repo:t → Render hittar `render.yaml` i roten.
+2. Om Render ändå försöker köra Node-buildpacken stoppar installationen numera med ett tydligt felmeddelande. Det är avsiktligt för att tvinga Docker-runtime.
+3. Kontrollera att tjänsten har `Runtime: Docker` och att både **Docker Context** och **Dockerfile** pekar på projektroten (`.`) respektive `./Dockerfile`.
+4. Om du redan har en Node-baserad tjänst: skapa en **ny** tjänst med blueprinten (Render byter inte alltid runtime på befintliga tjänster även om `render.yaml` uppdateras) och radera/pausa den gamla.
+5. Efter deploy är MCP-endpointen tillgänglig på `/mcp` (GET för metadata, POST för JSON-RPC).
+
+### Lokalt med Docker
+
+```bash
+docker build -t scb-mcp .
+docker run -p 3000:3000 scb-mcp
+```
+
+Servern svarar på `http://localhost:3000/mcp` och `/health`.
 
 ### Vercel/Railway/Fly.io
 

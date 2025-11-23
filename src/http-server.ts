@@ -12,9 +12,8 @@ import {
   ListToolsRequestSchema,
   ListPromptsRequestSchema,
   GetPromptRequestSchema,
-  Tool,
 } from '@modelcontextprotocol/sdk/types.js';
-import { SCBApiClient } from './api-client.js';
+import { SCBMCPServer } from './index.js';
 import { prompts, getPromptById, generatePromptMessages } from './prompts.js';
 
 const __filename = fileURLToPath(import.meta.url);
@@ -61,18 +60,18 @@ const server = new Server(
   }
 );
 
-const apiClient = new SCBApiClient();
+const mcpServer = new SCBMCPServer();
 
 // Setup tool handlers
 server.setRequestHandler(ListToolsRequestSchema, async () => {
   return {
-    tools: getTools(),
+    tools: mcpServer.getTools(),
   };
 });
 
 server.setRequestHandler(CallToolRequestSchema, async (request) => {
   const { name, arguments: args } = request.params;
-  return await handleToolCall(name, args);
+  return await mcpServer.callTool(name, args);
 });
 
 // Setup prompt handlers
@@ -116,8 +115,8 @@ app.get('/mcp', (req, res) => {
       resources: false,
       prompts: true,
     },
-    tools: 11,
-    prompts: 6,
+    tools: mcpServer.getTools().length,
+    prompts: prompts.length,
     connection: {
       method: 'POST',
       endpoint: '/mcp',
@@ -178,7 +177,7 @@ app.post('/mcp', async (req, res) => {
 
     // Handle tools/list
     if (method === 'tools/list') {
-      const tools = getTools();
+      const tools = mcpServer.getTools();
       return res.status(200).json({
         jsonrpc: '2.0',
         id,
@@ -191,7 +190,7 @@ app.post('/mcp', async (req, res) => {
     // Handle tools/call
     if (method === 'tools/call') {
       const { name, arguments: args } = params;
-      const result = await handleToolCall(name, args);
+      const result = await mcpServer.callTool(name, args);
       return res.status(200).json({
         jsonrpc: '2.0',
         id,
@@ -464,507 +463,3 @@ app.listen(PORT, () => {
   console.log(`Info endpoint: http://localhost:${PORT}/mcp`);
   console.log(`Health check: http://localhost:${PORT}/health`);
 });
-
-// Tool definitions
-function getTools(): Tool[] {
-  return [
-    {
-      name: 'scb_get_api_status',
-      description: 'Get API configuration and rate limit information from Statistics Sweden',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-      },
-    },
-    {
-      name: 'scb_search_tables',
-      description: 'Search for statistical tables in the SCB database',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          query: {
-            type: 'string',
-            description: 'Search term',
-          },
-          pageSize: {
-            type: 'number',
-            description: 'Results per page (max 100)',
-            default: 20,
-          },
-          language: {
-            type: 'string',
-            description: 'Language (en/sv)',
-            default: 'en',
-          },
-          category: {
-            type: 'string',
-            description: 'Filter by category: population, labour, economy, housing',
-          },
-        },
-      },
-    },
-    {
-      name: 'scb_get_table_info',
-      description: 'Get detailed metadata about a specific table',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          tableId: {
-            type: 'string',
-            description: 'Table ID (e.g., BE0101N1)',
-          },
-          language: {
-            type: 'string',
-            description: 'Language (en/sv)',
-            default: 'en',
-          },
-        },
-        required: ['tableId'],
-      },
-    },
-    {
-      name: 'scb_get_table_data',
-      description: 'Get statistical data from a table',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          tableId: {
-            type: 'string',
-            description: 'Table ID',
-          },
-          selection: {
-            type: 'object',
-            description: 'Variable selection (variable: [values])',
-            additionalProperties: {
-              type: 'array',
-              items: {
-                type: 'string',
-              },
-            },
-          },
-          language: {
-            type: 'string',
-            default: 'en',
-          },
-        },
-        required: ['tableId'],
-      },
-    },
-    {
-      name: 'scb_check_usage',
-      description: 'Check current API usage and rate limits',
-      inputSchema: {
-        type: 'object',
-        properties: {},
-      },
-    },
-    {
-      name: 'scb_search_regions',
-      description: 'Search for region codes by name',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          query: {
-            type: 'string',
-            description: 'Region name to search',
-          },
-          language: {
-            type: 'string',
-            default: 'en',
-          },
-        },
-        required: ['query'],
-      },
-    },
-    {
-      name: 'scb_get_table_variables',
-      description: 'Get available variables and values for a table',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          tableId: {
-            type: 'string',
-            description: 'Table ID',
-          },
-          language: {
-            type: 'string',
-            default: 'en',
-          },
-          variableName: {
-            type: 'string',
-            description: 'Optional: specific variable',
-          },
-        },
-        required: ['tableId'],
-      },
-    },
-    {
-      name: 'scb_find_region_code',
-      description: 'Find exact region code for a municipality',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          query: {
-            type: 'string',
-            description: 'Municipality name',
-          },
-          tableId: {
-            type: 'string',
-            description: 'Optional: specific table',
-          },
-          language: {
-            type: 'string',
-            default: 'en',
-          },
-        },
-        required: ['query'],
-      },
-    },
-    {
-      name: 'scb_test_selection',
-      description: 'Test if a data selection is valid',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          tableId: {
-            type: 'string',
-          },
-          selection: {
-            type: 'object',
-            additionalProperties: {
-              type: 'array',
-              items: {
-                type: 'string',
-              },
-            },
-          },
-          language: {
-            type: 'string',
-            default: 'en',
-          },
-        },
-        required: ['tableId', 'selection'],
-      },
-    },
-    {
-      name: 'scb_preview_data',
-      description: 'Get a small preview of data',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          tableId: {
-            type: 'string',
-          },
-          selection: {
-            type: 'object',
-            additionalProperties: {
-              type: 'array',
-              items: {
-                type: 'string',
-              },
-            },
-          },
-          language: {
-            type: 'string',
-            default: 'en',
-          },
-        },
-        required: ['tableId'],
-      },
-    },
-    {
-      name: 'scb_browse_folders',
-      description: 'Browse database folders (deprecated in API v2)',
-      inputSchema: {
-        type: 'object',
-        properties: {
-          folderId: {
-            type: 'string',
-            description: 'Folder ID',
-          },
-          language: {
-            type: 'string',
-            default: 'en',
-          },
-        },
-      },
-    },
-  ];
-}
-
-// Tool call handler - delegates to API client
-async function handleToolCall(name: string, args: any) {
-  try {
-    switch (name) {
-      case 'scb_get_api_status':
-        const config = await apiClient.getConfig();
-        const rateLimitInfo = apiClient.getRateLimitInfo();
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                api_version: config.apiVersion || '2.0.0',
-                max_data_cells: config.maxDataCells || 150000,
-                rate_limit: {
-                  max_calls: rateLimitInfo?.maxCalls || 30,
-                  time_window: rateLimitInfo?.timeWindow || 10,
-                  remaining: rateLimitInfo?.remaining || 30,
-                },
-              }, null, 2),
-            },
-          ],
-        };
-
-      case 'scb_check_usage':
-        const usageInfo = apiClient.getUsageInfo();
-        const resetIn = usageInfo.rateLimitInfo?.resetTime
-          ? Math.max(0, Math.ceil((usageInfo.rateLimitInfo.resetTime.getTime() - Date.now()) / 1000))
-          : 10;
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                calls_made: usageInfo.requestCount,
-                calls_remaining: usageInfo.rateLimitInfo?.remaining || 30,
-                reset_in_seconds: resetIn,
-                window_start: usageInfo.windowStart.toISOString(),
-              }, null, 2),
-            },
-          ],
-        };
-
-      case 'scb_search_tables':
-        const searchResult = await apiClient.searchTables({
-          query: args.query,
-          pageSize: args.pageSize || 20,
-          lang: args.language || 'en',
-        });
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(searchResult, null, 2),
-            },
-          ],
-        };
-
-      case 'scb_get_table_info':
-        const tableInfo = await apiClient.getTableMetadata(
-          args.tableId,
-          args.language || 'en'
-        );
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(tableInfo, null, 2),
-            },
-          ],
-        };
-
-      case 'scb_get_table_variables':
-        const metadata = await apiClient.getTableMetadata(args.tableId, args.language || 'en');
-        const variablesList = Object.keys(metadata.dimension || {}).map(varName => ({
-          variable_code: varName,
-          variable_name: varName,
-          total_values: metadata.dimension[varName]?.category?.index ? Object.keys(metadata.dimension[varName].category.index).length : 0,
-          sample_values: metadata.dimension[varName]?.category?.index ?
-            Object.entries(metadata.dimension[varName].category.index).slice(0, 10).map(([code, idx]) => ({
-              code,
-              label: metadata.dimension[varName].category.label?.[code] || code,
-            })) : []
-        }));
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                table_id: args.tableId,
-                variables: args.variableName ?
-                  variablesList.filter(v => v.variable_name === args.variableName) :
-                  variablesList
-              }, null, 2),
-            },
-          ],
-        };
-
-      case 'scb_get_table_data':
-        const data = await apiClient.getTableData(
-          args.tableId,
-          args.selection,
-          args.language || 'en'
-        );
-        const structured = apiClient.transformToStructuredData(data, args.selection);
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(structured, null, 2),
-            },
-          ],
-        };
-
-      case 'scb_test_selection':
-        const validation = await apiClient.validateSelection(
-          args.tableId,
-          args.selection,
-          args.language || 'en'
-        );
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                is_valid: validation.isValid,
-                errors: validation.errors,
-                suggestions: validation.suggestions,
-                translated_selection: validation.translatedSelection,
-              }, null, 2),
-            },
-          ],
-        };
-
-      case 'scb_preview_data':
-        // Get metadata first to understand table structure
-        const previewMetadata = await apiClient.getTableMetadata(args.tableId, args.language || 'en');
-
-        // Create a limited selection automatically if none provided
-        let previewSelection = args.selection;
-        if (!previewSelection && previewMetadata.dimension) {
-          // Build automatic selection with first 5 values or "*" for each dimension
-          previewSelection = {};
-          for (const [dimName, dimDef] of Object.entries(previewMetadata.dimension)) {
-            const values = Object.keys(dimDef.category.index);
-            // Limit to first 3 values to keep preview small
-            previewSelection[dimName] = values.length <= 3 ? values : values.slice(0, 3);
-          }
-        }
-
-        const previewData = await apiClient.getTableData(
-          args.tableId,
-          previewSelection,
-          args.language || 'en'
-        );
-        const previewStructured = apiClient.transformToStructuredData(previewData, previewSelection);
-
-        // Limit to first 20 records
-        const limitedData = {
-          ...previewStructured,
-          data: previewStructured.data.slice(0, 20),
-          summary: {
-            ...previewStructured.summary,
-            displayed_records: Math.min(20, previewStructured.data.length),
-            total_records: previewStructured.summary.total_records,
-            note: previewStructured.data.length > 20
-              ? `Showing first 20 of ${previewStructured.data.length} records. Use scb_get_table_data with specific selection for full data.`
-              : 'Showing all records',
-          },
-        };
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(limitedData, null, 2),
-            },
-          ],
-        };
-
-      case 'scb_browse_folders':
-        const folderData = await apiClient.getNavigation(
-          args.folderId,
-          args.language || 'en'
-        );
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify(folderData, null, 2),
-            },
-          ],
-        };
-
-      case 'scb_search_regions':
-        const regions = await apiClient.searchRegions(
-          args.query,
-          args.language || 'en'
-        );
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                query: args.query,
-                results: regions,
-                total_found: regions.length,
-              }, null, 2),
-            },
-          ],
-        };
-
-      case 'scb_find_region_code':
-        const regionMatch = await apiClient.findRegionCode(
-          args.query,
-          args.tableId,
-          args.language || 'en'
-        );
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                query: args.query,
-                exact_matches: regionMatch.exact_matches,
-                suggestions: regionMatch.suggestions,
-              }, null, 2),
-            },
-          ],
-        };
-
-      default:
-        throw new Error(`Tool not implemented in HTTP server: ${name}`);
-    }
-  } catch (error) {
-    // Parse error message to extract structured info
-    const errorMessage = error instanceof Error ? error.message : String(error);
-
-    // Try to extract SCB API error details from message
-    let scbError = null;
-    let httpStatus = null;
-
-    // Check if message contains SCB JSON error
-    const jsonMatch = errorMessage.match(/(\{.*"type".*\})/);
-    if (jsonMatch) {
-      try {
-        scbError = JSON.parse(jsonMatch[1]);
-      } catch (e) {
-        // Not valid JSON, continue
-      }
-    }
-
-    // Extract HTTP status code
-    const statusMatch = errorMessage.match(/(\d{3})\s+([\w\s]+?):/);
-    if (statusMatch) {
-      httpStatus = parseInt(statusMatch[1]);
-    }
-
-    return {
-      content: [
-        {
-          type: 'text',
-          text: JSON.stringify({
-            error: {
-              tool: name,
-              message: errorMessage,
-              http_status: httpStatus,
-              scb_error: scbError,
-              timestamp: new Date().toISOString(),
-            },
-          }, null, 2),
-        },
-      ],
-    };
-  }
-}
