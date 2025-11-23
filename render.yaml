@@ -1,10 +1,14 @@
+apiVersion: v1
 services:
   - type: web
     name: scb-mcp-http
     env: docker
+    branch: master
     region: frankfurt
     plan: free
     dockerfilePath: ./Dockerfile
+    dockerContext: .
+    healthCheckPath: /health
     envVars:
       - key: NODE_ENV
         value: production
