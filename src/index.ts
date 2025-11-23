@@ -9,17 +9,18 @@ import {
   ListPromptsRequestSchema,
   Tool,
 } from '@modelcontextprotocol/sdk/types.js';
+import { fileURLToPath } from 'url';
 import { SCBApiClient } from './api-client.js';
 
-class SCBMCPServer {
+export class SCBMCPServer {
   private server: Server;
   private apiClient: SCBApiClient;
   
   constructor() {
     this.server = new Server(
       {
-        name: 'scb-mcp',
-        version: '1.0.0',
+        name: 'SCB MCP Server',
+        version: '2.4.1',
       },
       {
         capabilities: {
@@ -59,59 +60,11 @@ class SCBMCPServer {
     // Handle tool calls
     this.server.setRequestHandler(CallToolRequestSchema, async (request) => {
       const { name, arguments: args } = request.params;
-
-      try {
-        switch (name) {
-          case 'scb_get_api_status':
-            return await this.handleGetApiStatus();
-
-          case 'scb_browse_folders':
-            return await this.handleBrowseFolders(args as any);
-
-          case 'scb_search_tables':
-            return await this.handleSearchTables(args as any);
-
-          case 'scb_get_table_info':
-            return await this.handleGetTableInfo(args as any);
-
-          case 'scb_get_table_data':
-            return await this.handleGetTableData(args as any);
-
-          case 'scb_check_usage':
-            return await this.handleCheckUsage();
-
-          case 'scb_search_regions':
-            return await this.handleSearchRegions(args as any);
-
-          case 'scb_get_table_variables':
-            return await this.handleGetTableVariables(args as any);
-
-          case 'scb_find_region_code':
-            return await this.handleFindRegionCode(args as any);
-
-          case 'scb_test_selection':
-            return await this.handleTestSelection(args as any);
-
-          case 'scb_preview_data':
-            return await this.handlePreviewData(args as any);
-
-          default:
-            throw new Error(`Unknown tool: ${name}`);
-        }
-      } catch (error) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: `Error: ${error instanceof Error ? error.message : String(error)}`,
-            },
-          ],
-        };
-      }
+      return await this.callTool(name, args);
     });
   }
 
-  private getTools(): Tool[] {
+  public getTools(): Tool[] {
     return [
       {
         name: 'scb_get_api_status',
@@ -354,6 +307,57 @@ class SCBMCPServer {
         },
       },
     ];
+  }
+
+  public async callTool(name: string, args: any) {
+    try {
+      switch (name) {
+        case 'scb_get_api_status':
+          return await this.handleGetApiStatus();
+
+        case 'scb_browse_folders':
+          return await this.handleBrowseFolders(args as any);
+
+        case 'scb_search_tables':
+          return await this.handleSearchTables(args as any);
+
+        case 'scb_get_table_info':
+          return await this.handleGetTableInfo(args as any);
+
+        case 'scb_get_table_data':
+          return await this.handleGetTableData(args as any);
+
+        case 'scb_check_usage':
+          return await this.handleCheckUsage();
+
+        case 'scb_search_regions':
+          return await this.handleSearchRegions(args as any);
+
+        case 'scb_get_table_variables':
+          return await this.handleGetTableVariables(args as any);
+
+        case 'scb_find_region_code':
+          return await this.handleFindRegionCode(args as any);
+
+        case 'scb_test_selection':
+          return await this.handleTestSelection(args as any);
+
+        case 'scb_preview_data':
+          return await this.handlePreviewData(args as any);
+
+        default:
+          throw new Error(`Unknown tool: ${name}`);
+      }
+    } catch (error) {
+      return {
+        content: [
+          {
+            type: 'text',
+            text: `Error: ${error instanceof Error ? error.message : String(error)}`,
+          },
+        ],
+      };
+    }
   }
 
   private async handleGetApiStatus() {
@@ -1202,6 +1206,10 @@ ${structuredData.data.slice(0, 5).map(record => {
   }
 }
 
-// Start the server
-const server = new SCBMCPServer();
-server.run().catch(console.error);
+// Start the server when executed directly
+const currentFile = fileURLToPath(import.meta.url);
+
+if (process.argv[1] === currentFile) {
+  const server = new SCBMCPServer();
+  server.run().catch(console.error);
+}
