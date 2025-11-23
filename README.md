@@ -64,6 +64,31 @@ Lägg till i din Claude Desktop-konfiguration:
 claude mcp add --transport http scb-statistics https://scb-mcp-http.onrender.com/mcp
 ```
 
+### Lokal MCP (stdio)
+
+Kör servern lokalt via stdio-transport efter build:
+
+```bash
+npm install
+npm run build
+npm run start:stdio
+```
+
+Exempel på Claude Desktop-konfiguration för lokal stdio-server:
+
+```json
+{
+  "mcpServers": {
+    "scb-statistics-local": {
+      "type": "stdio",
+      "command": "node",
+      "args": ["/full/path/till/dist/index.js"],
+      "description": "Lokalt SCB MCP-server (stdio)"
+    }
+  }
+}
+```
+
 ### Med andra MCP-klienter
 
 Servern är tillgänglig via HTTP på:
