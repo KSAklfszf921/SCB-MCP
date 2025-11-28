@@ -73,7 +73,7 @@ export class SCBMCPServer {
     constructor() {
         this.server = new Server({
             name: 'SCB MCP Server',
-            version: '2.4.2',
+            version: '2.5.0',
         }, {
             capabilities: {
                 tools: {},
@@ -138,13 +138,13 @@ export class SCBMCPServer {
             },
             {
                 name: 'scb_search_tables',
-                description: 'Search for statistical tables in the SCB database. TIP: Swedish search terms work best (e.g., "befolkning" instead of "population", "arbetslöshet" instead of "unemployment")',
+                description: 'Search for statistical tables in the SCB database. IMPORTANT: Swedish search terms give MUCH better results. Use "befolkning" not "population", "arbetslöshet" not "unemployment", "inkomst" not "income".',
                 inputSchema: {
                     type: 'object',
                     properties: {
                         query: {
                             type: 'string',
-                            description: 'Search term - Swedish terms recommended (e.g., "befolkning", "arbetslöshet", "inkomst"). English works but Swedish gives better results.',
+                            description: 'Search term - USE SWEDISH for best results. Examples: "befolkning" (population), "arbetslöshet" (unemployment), "inkomst" (income), "bostäder" (housing), "miljö" (environment).',
                         },
                         pastDays: {
                             type: 'number',
@@ -185,7 +185,7 @@ export class SCBMCPServer {
                     properties: {
                         tableId: {
                             type: 'string',
-                            description: 'Table ID (e.g., "BE0101N1")',
+                            description: 'Table ID (e.g., "TAB4552", "TAB4560")',
                         },
                         language: {
                             type: 'string',
@@ -204,11 +204,11 @@ export class SCBMCPServer {
                     properties: {
                         tableId: {
                             type: 'string',
-                            description: 'Table ID (e.g., "BE0101N1")',
+                            description: 'Table ID (e.g., "TAB4552", "TAB4560")',
                         },
                         selection: {
                             type: 'object',
-                            description: 'Variable selection (variable_name: [value1, value2]). Use * for all values, or expressions like "TOP(5)"',
+                            description: 'Optional variable selection. Format: {"VariableName": ["value1", "value2"]}. Use "*" for all values, "TOP(5)" for latest 5. If omitted, API uses smart defaults.',
                             additionalProperties: {
                                 type: 'array',
                                 items: { type: 'string' },
@@ -304,11 +304,11 @@ export class SCBMCPServer {
                     properties: {
                         tableId: {
                             type: 'string',
-                            description: 'Table ID (e.g., "TAB1267")',
+                            description: 'Table ID (e.g., "TAB4552")',
                         },
                         selection: {
                             type: 'object',
-                            description: 'Variable selection to test (required). Format: { "VariableName": ["value1", "value2"] }',
+                            description: 'Variable selection to test (optional). Format: { "VariableName": ["value1", "value2"] }. Empty selection will validate that defaults can be used.',
                             additionalProperties: {
                                 type: 'array',
                                 items: { type: 'string' },
@@ -320,7 +320,7 @@ export class SCBMCPServer {
                             default: 'sv',
                         },
                     },
-                    required: ['tableId', 'selection'],
+                    required: ['tableId'],
                 },
             },
             {
@@ -331,11 +331,11 @@ export class SCBMCPServer {
                     properties: {
                         tableId: {
                             type: 'string',
-                            description: 'Table ID (e.g., "TAB1267")',
+                            description: 'Table ID (e.g., "TAB4552", "TAB4560")',
                         },
                         selection: {
                             type: 'object',
-                            description: 'Optional variable selection (automatically limited to small sample)',
+                            description: 'Optional variable selection (automatically limited to small sample). If omitted, uses smart defaults.',
                             additionalProperties: {
                                 type: 'array',
                                 items: { type: 'string' },
@@ -393,26 +393,44 @@ export class SCBMCPServer {
     async handleGetApiStatus() {
         const config = await this.apiClient.getConfig();
         const usage = this.apiClient.getUsageInfo();
+        // Return structured JSON response
+        const responseData = {
+            api: {
+                version: config.apiVersion,
+                app_version: config.appVersion || null,
+                endpoint: 'https://statistikdatabasen.scb.se/api/v2',
+                default_language: config.defaultLanguage,
+                languages: config.languages.map(l => ({ code: l.id, name: l.label })),
+                max_data_cells: config.maxDataCells,
+                rate_limit: {
+                    max_calls: config.maxCallsPerTimeWindow,
+                    time_window_seconds: config.timeWindow
+                },
+                license: config.license,
+                data_formats: config.dataFormats || ['json-stat2', 'csv', 'px', 'xlsx', 'html']
+            },
+            current_usage: {
+                requests_made: usage.requestCount,
+                max_calls: usage.rateLimitInfo?.maxCalls || config.maxCallsPerTimeWindow,
+                remaining: usage.rateLimitInfo?.remaining ?? (config.maxCallsPerTimeWindow - usage.requestCount),
+                window_started: usage.windowStart.toISOString(),
+                reset_time: usage.rateLimitInfo?.resetTime?.toISOString() || null
+            },
+            citation: config.sourceReferences?.map(ref => ({
+                language: ref.language,
+                text: ref.text
+            })) || [],
+            tips: [
+                'Use Swedish search terms for better results (e.g., "befolkning" instead of "population")',
+                'Use scb_preview_data before fetching large datasets',
+                'Use scb_test_selection to validate queries before execution'
+            ]
+        };
         return {
             content: [
                 {
                     type: 'text',
-                    text: `**SCB API Status**
-
-**Configuration:**
-- API Version: ${config.apiVersion}
-- Default Language: ${config.defaultLanguage}
-- Available Languages: ${config.languages.map(l => `${l.id} (${l.label})`).join(', ')}
-- Max Data Cells per Request: ${config.maxDataCells.toLocaleString()}
-- Rate Limit: ${config.maxCallsPerTimeWindow} calls per ${config.timeWindow} seconds
-- License: ${config.license}
-
-**Current Usage:**
-- Requests Made: ${usage.requestCount}/${usage.rateLimitInfo?.maxCalls || config.maxCallsPerTimeWindow}
-- Remaining Requests: ${usage.rateLimitInfo?.remaining || 'Unknown'}
-- Window Started: ${usage.windowStart.toISOString()}
-
-${config.sourceReferences?.length ? `**Citation:**\n${config.sourceReferences.map(ref => `- ${ref.language}: ${ref.text}`).join('\n')}` : ''}`,
+                    text: JSON.stringify(responseData, null, 2)
                 },
             ],
         };
@@ -431,21 +449,41 @@ ${config.sourceReferences?.length ? `**Citation:**\n${config.sourceReferences.ma
             language,
             pageSize
         });
+        // Category keyword mappings (Swedish and English terms)
+        const categoryKeywords = {
+            'population': ['population', 'befolkning', 'invånare', 'folk', 'demographic', 'demografi', 'födelse', 'birth', 'död', 'death', 'migration', 'flyttning', 'ålder', 'age', 'kön', 'sex', 'gender'],
+            'labour': ['labour', 'labor', 'employment', 'arbete', 'arbets', 'sysselsättning', 'sysselsatt', 'arbetslös', 'unemployment', 'yrke', 'occupation', 'lön', 'wage', 'salary'],
+            'economy': ['gdp', 'bnp', 'income', 'inkomst', 'ekonomi', 'economy', 'economic', 'finans', 'finance', 'skatt', 'tax', 'pris', 'price', 'inflation', 'handel', 'trade', 'export', 'import', 'företag', 'business', 'närings'],
+            'housing': ['housing', 'bostad', 'boende', 'dwelling', 'lägenhet', 'apartment', 'hus', 'house', 'hyra', 'rent', 'fastighet', 'property', 'byggnation', 'construction'],
+            'environment': ['miljö', 'environment', 'utsläpp', 'emission', 'klimat', 'climate', 'energi', 'energy', 'avfall', 'waste', 'vatten', 'water', 'luft', 'air'],
+            'education': ['utbildning', 'education', 'skola', 'school', 'student', 'elev', 'universitet', 'university', 'högskola', 'examen', 'degree'],
+            'health': ['hälsa', 'health', 'sjukvård', 'healthcare', 'sjukdom', 'disease', 'vård', 'care', 'dödsorsak', 'cause of death']
+        };
+        const validCategories = Object.keys(categoryKeywords);
+        // Validate category if specified
+        if (args.category) {
+            const categoryLower = args.category.toLowerCase();
+            if (!validCategories.includes(categoryLower)) {
+                return createErrorResponse({
+                    type: 'invalid_category',
+                    message: `Invalid category "${args.category}"`,
+                    details: {
+                        provided: args.category,
+                        valid_categories: validCategories
+                    },
+                    suggestions: [
+                        `Use one of: ${validCategories.join(', ')}`,
+                        'Remove the category filter to search all tables',
+                        'Use query parameter to search by keywords instead'
+                    ]
+                });
+            }
+        }
         // Filter by category if specified - expanded keyword matching
         let filteredTables = result.tables;
         if (args.category) {
             const categoryLower = args.category.toLowerCase();
-            // Category keyword mappings (Swedish and English terms)
-            const categoryKeywords = {
-                'population': ['population', 'befolkning', 'invånare', 'folk', 'demographic', 'demografi', 'födelse', 'birth', 'död', 'death', 'migration', 'flyttning', 'ålder', 'age', 'kön', 'sex', 'gender'],
-                'labour': ['labour', 'labor', 'employment', 'arbete', 'arbets', 'sysselsättning', 'sysselsatt', 'arbetslös', 'unemployment', 'yrke', 'occupation', 'lön', 'wage', 'salary'],
-                'economy': ['gdp', 'bnp', 'income', 'inkomst', 'ekonomi', 'economy', 'economic', 'finans', 'finance', 'skatt', 'tax', 'pris', 'price', 'inflation', 'handel', 'trade', 'export', 'import', 'företag', 'business', 'närings'],
-                'housing': ['housing', 'bostad', 'boende', 'dwelling', 'lägenhet', 'apartment', 'hus', 'house', 'hyra', 'rent', 'fastighet', 'property', 'byggnation', 'construction'],
-                'environment': ['miljö', 'environment', 'utsläpp', 'emission', 'klimat', 'climate', 'energi', 'energy', 'avfall', 'waste', 'vatten', 'water', 'luft', 'air'],
-                'education': ['utbildning', 'education', 'skola', 'school', 'student', 'elev', 'universitet', 'university', 'högskola', 'examen', 'degree'],
-                'health': ['hälsa', 'health', 'sjukvård', 'healthcare', 'sjukdom', 'disease', 'vård', 'care', 'dödsorsak', 'cause of death']
-            };
-            const keywords = categoryKeywords[categoryLower] || [categoryLower];
+            const keywords = categoryKeywords[categoryLower];
             filteredTables = result.tables.filter(table => {
                 const searchText = [
                     table.label,
@@ -608,7 +646,7 @@ ${result.page.totalElements > 50 ? `💡 **Search Tips:**
                                 language_warning: langValidation.warning || null
                             },
                             suggestions: [
-                                'Verify the table ID is correct (e.g., "TAB637", "BE0101N1")',
+                                'Verify the table ID is correct (e.g., "TAB4552", "TAB4560")',
                                 'Use scb_search_tables to find valid table IDs',
                                 'Check that the table has not been discontinued'
                             ]
@@ -626,11 +664,21 @@ ${result.page.totalElements > 50 ? `💡 **Search Tips:**
             const data = await this.apiClient.getTableData(tableId, selection, language);
             // Transform to structured JSON data
             const structuredData = this.apiClient.transformToStructuredData(data, selection);
-            // Add language info
+            // Extract effective selection from the returned data dimensions
+            const effectiveSelection = {};
+            if (data.dimension) {
+                for (const [dimName, dimDef] of Object.entries(data.dimension)) {
+                    const codes = Object.keys(dimDef.category.index);
+                    effectiveSelection[dimName] = codes;
+                }
+            }
+            // Add language info and effective_selection
             const responseData = {
                 ...structuredData,
                 query: {
                     ...structuredData.query,
+                    selection: selection || {},
+                    effective_selection: effectiveSelection,
                     language_used: language,
                     language_warning: langValidation.warning || null
                 }
@@ -684,25 +732,42 @@ ${result.page.totalElements > 50 ? `💡 **Search Tips:**
     async handleCheckUsage() {
         const usage = this.apiClient.getUsageInfo();
         const rateLimitInfo = usage.rateLimitInfo;
+        // Calculate usage percentage and status
+        const usagePercent = rateLimitInfo
+            ? Math.round((usage.requestCount / rateLimitInfo.maxCalls) * 100)
+            : 0;
+        let status = 'ok';
+        if (usagePercent >= 90)
+            status = 'critical';
+        else if (usagePercent >= 70)
+            status = 'warning';
+        // Return structured JSON response
+        const responseData = {
+            usage: {
+                requests_made: usage.requestCount,
+                max_calls: rateLimitInfo?.maxCalls || 30,
+                remaining: rateLimitInfo?.remaining ?? (30 - usage.requestCount),
+                window_started: usage.windowStart.toISOString(),
+                reset_time: rateLimitInfo?.resetTime.toISOString() || null,
+                time_window_seconds: rateLimitInfo?.timeWindow || 10,
+                usage_percent: usagePercent
+            },
+            status: status,
+            tips: usagePercent > 50 ? [
+                'Space out your requests to avoid rate limits',
+                'Use specific selections to reduce API calls',
+                'Use scb_preview_data before fetching full datasets'
+            ] : [],
+            api_info: {
+                endpoint: 'https://statistikdatabasen.scb.se/api/v2',
+                version: '2.0.0'
+            }
+        };
         return {
             content: [
                 {
                     type: 'text',
-                    text: `**API Usage Status**
-
-**Current Window:**
-- Requests Made: ${usage.requestCount}
-- Window Started: ${usage.windowStart.toISOString()}
-
-${rateLimitInfo ? `**Rate Limits:**
-- Max Calls: ${rateLimitInfo.maxCalls}
-- Remaining: ${rateLimitInfo.remaining}
-- Time Window: ${rateLimitInfo.timeWindow} seconds
-- Reset Time: ${rateLimitInfo.resetTime.toISOString()}
-
-**Usage:** ${usage.requestCount}/${rateLimitInfo.maxCalls} (${Math.round((usage.requestCount / rateLimitInfo.maxCalls) * 100)}%)` : '**Rate limit information not available yet**'}
-
-${usage.requestCount > 0 ? `⚠️ **Tip:** To avoid rate limits, space out your requests and use specific selections to reduce API calls.` : ''}`,
+                    text: JSON.stringify(responseData, null, 2)
                 },
             ],
         };
@@ -951,7 +1016,7 @@ ${variableData.map(v => `**${v.variable_code}** (${v.variable_name})
                                 language_warning: langValidation.warning || null
                             },
                             suggestions: [
-                                'Verify the table ID is correct (e.g., "TAB637", "BE0101N1")',
+                                'Verify the table ID is correct (e.g., "TAB4552", "TAB4560")',
                                 'Use scb_search_tables to find valid table IDs',
                                 'Check that the table has not been discontinued'
                             ]
@@ -965,6 +1030,74 @@ ${variableData.map(v => `**${v.variable_code}** (${v.variable_name})
         const { query, tableId } = args;
         const langValidation = validateLanguage(args.language);
         const language = langValidation.language;
+        // Common regions for fallback and immediate matching (same as handleSearchRegions)
+        const commonRegions = [
+            { code: '00', name: 'Riket (hela Sverige)', type: 'country' },
+            { code: '01', name: 'Stockholms län', type: 'county' },
+            { code: '03', name: 'Uppsala län', type: 'county' },
+            { code: '04', name: 'Södermanlands län', type: 'county' },
+            { code: '05', name: 'Östergötlands län', type: 'county' },
+            { code: '06', name: 'Jönköpings län', type: 'county' },
+            { code: '07', name: 'Kronobergs län', type: 'county' },
+            { code: '08', name: 'Kalmar län', type: 'county' },
+            { code: '09', name: 'Gotlands län', type: 'county' },
+            { code: '10', name: 'Blekinge län', type: 'county' },
+            { code: '12', name: 'Skåne län', type: 'county' },
+            { code: '13', name: 'Hallands län', type: 'county' },
+            { code: '14', name: 'Västra Götalands län', type: 'county' },
+            { code: '17', name: 'Värmlands län', type: 'county' },
+            { code: '18', name: 'Örebro län', type: 'county' },
+            { code: '19', name: 'Västmanlands län', type: 'county' },
+            { code: '20', name: 'Dalarnas län', type: 'county' },
+            { code: '21', name: 'Gävleborgs län', type: 'county' },
+            { code: '22', name: 'Västernorrlands län', type: 'county' },
+            { code: '23', name: 'Jämtlands län', type: 'county' },
+            { code: '24', name: 'Västerbottens län', type: 'county' },
+            { code: '25', name: 'Norrbottens län', type: 'county' },
+            { code: '0180', name: 'Stockholm', type: 'municipality' },
+            { code: '1480', name: 'Göteborg', type: 'municipality' },
+            { code: '1280', name: 'Malmö', type: 'municipality' },
+            { code: '1441', name: 'Lerum', type: 'municipality' },
+            { code: '1484', name: 'Lysekil', type: 'municipality' },
+            { code: '0380', name: 'Uppsala', type: 'municipality' },
+            { code: '1281', name: 'Lund', type: 'municipality' },
+            { code: '0580', name: 'Linköping', type: 'municipality' },
+            { code: '1880', name: 'Örebro', type: 'municipality' },
+            { code: '0680', name: 'Jönköping', type: 'municipality' },
+            { code: '2580', name: 'Luleå', type: 'municipality' },
+            { code: '2480', name: 'Umeå', type: 'municipality' },
+        ];
+        // FIRST: Try to match against common regions (fast, no API call needed)
+        const commonMatches = commonRegions.filter(region => fuzzyMatchRegion(query, region.name, region.code));
+        if (commonMatches.length > 0 && !tableId) {
+            // Found in common regions - return immediately without API call
+            const results = commonMatches.map(r => ({
+                code: r.code,
+                name: r.name,
+                type: r.type,
+                match_type: 'exact'
+            }));
+            return {
+                content: [
+                    {
+                        type: 'text',
+                        text: JSON.stringify({
+                            query: query,
+                            matches: results,
+                            match_type: 'exact_matches',
+                            total_matches: results.length,
+                            primary_match: results[0],
+                            usage_example: { Region: [results[0].code] },
+                            language_used: language,
+                            language_warning: langValidation.warning || null,
+                            source: 'common_regions_cache',
+                            note: 'Matched from built-in region database. Use tableId parameter for table-specific region codes.'
+                        }, null, 2)
+                    }
+                ]
+            };
+        }
+        // SECOND: If not found in common regions or tableId specified, search via API
         try {
             let targetTableId;
             if (tableId) {
@@ -974,7 +1107,7 @@ ${variableData.map(v => `**${v.variable_code}** (${v.variable_name})
             else {
                 // Look for a common population table that has region data
                 const searchResults = await this.apiClient.searchTables({
-                    query: 'population municipality region',
+                    query: 'befolkning kommun region',
                     pageSize: 10,
                     lang: language
                 });
@@ -1138,6 +1271,35 @@ ${exactResults.map(r => `- **${r.code}**: ${r.name}`).join('\n')}
         }
         catch (error) {
             const errorMessage = error instanceof Error ? error.message : String(error);
+            // If API search failed, fall back to common regions one more time
+            const fallbackMatches = commonRegions.filter(region => fuzzyMatchRegion(query, region.name, region.code));
+            if (fallbackMatches.length > 0) {
+                const results = fallbackMatches.map(r => ({
+                    code: r.code,
+                    name: r.name,
+                    type: r.type,
+                    match_type: 'fallback'
+                }));
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: JSON.stringify({
+                                query: query,
+                                matches: results,
+                                match_type: 'fallback_matches',
+                                total_matches: results.length,
+                                primary_match: results[0],
+                                usage_example: { Region: [results[0].code] },
+                                language_used: language,
+                                language_warning: langValidation.warning || null,
+                                source: 'common_regions_fallback',
+                                note: 'API search failed, matched from built-in region database instead.'
+                            }, null, 2)
+                        }
+                    ]
+                };
+            }
             return {
                 content: [
                     {
@@ -1164,21 +1326,50 @@ ${exactResults.map(r => `- **${r.code}**: ${r.name}`).join('\n')}
         const { tableId, selection } = args;
         const langValidation = validateLanguage(args.language);
         const language = langValidation.language;
-        // Check if selection is provided and valid
-        if (!selection || typeof selection !== 'object' || Object.keys(selection).length === 0) {
-            return createErrorResponse({
-                type: 'invalid_selection',
-                message: 'The "selection" parameter is required and must be a non-empty object',
-                details: {
-                    provided: selection,
-                    expected: '{ "VariableName": ["value1", "value2"] }'
-                },
-                suggestions: [
-                    'Use scb_get_table_variables to see available variables and their values',
-                    'Example: { "Region": ["0180"], "Tid": ["2024"] }',
-                    'Use "*" for all values or "TOP(5)" for latest 5'
-                ]
-            });
+        // Handle empty/missing selection - this is now valid (will use defaults)
+        const isEmptySelection = !selection || typeof selection !== 'object' || Object.keys(selection).length === 0;
+        if (isEmptySelection) {
+            // Return success with info about default behavior
+            try {
+                const metadata = await this.apiClient.getTableMetadata(tableId, language);
+                const variables = Object.entries(metadata.dimension || {}).map(([code, def]) => ({
+                    code,
+                    label: def.label,
+                    value_count: Object.keys(def.category.index).length
+                }));
+                return {
+                    content: [
+                        {
+                            type: 'text',
+                            text: JSON.stringify({
+                                table_id: tableId,
+                                is_valid: true,
+                                selection_provided: false,
+                                language_used: language,
+                                language_warning: langValidation.warning || null,
+                                message: 'Empty selection is valid - API will use smart defaults (latest time period, all categories)',
+                                effective_selection: 'Will be determined by API at request time',
+                                available_variables: variables,
+                                next_step: 'Use scb_get_table_data or scb_preview_data - they will apply default selection automatically',
+                                tips: [
+                                    'For specific data, provide a selection like: {"Tid": ["2024"], "Region": ["0180"]}',
+                                    'Use scb_get_table_variables to see all available values'
+                                ]
+                            }, null, 2)
+                        }
+                    ]
+                };
+            }
+            catch (error) {
+                return createErrorResponse({
+                    type: 'table_not_found',
+                    message: `Could not validate table "${tableId}": ${error instanceof Error ? error.message : String(error)}`,
+                    suggestions: [
+                        'Verify the table ID is correct (e.g., "TAB4552")',
+                        'Use scb_search_tables to find valid table IDs'
+                    ]
+                });
+            }
         }
         try {
             // Use the existing validation logic
@@ -1279,11 +1470,21 @@ ${Object.entries(selection).map(([key, values]) => `- ${key}: [${values.join(', 
             const data = await this.apiClient.getTableData(tableId, previewSelection, language);
             // Transform to structured JSON data with preview flag
             const structuredData = this.apiClient.transformToStructuredData(data, previewSelection);
+            // Extract effective selection from the returned data dimensions
+            const effectiveSelection = {};
+            if (data.dimension) {
+                for (const [dimName, dimDef] of Object.entries(data.dimension)) {
+                    const codes = Object.keys(dimDef.category.index);
+                    effectiveSelection[dimName] = codes;
+                }
+            }
             // Add preview metadata and language info
             const previewData = {
                 ...structuredData,
                 query: {
                     ...structuredData.query,
+                    selection: selection || {},
+                    effective_selection: effectiveSelection,
                     language_used: language,
                     language_warning: langValidation.warning || null
                 },

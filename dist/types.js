@@ -1,8 +1,10 @@
 import { z } from 'zod';
 // Base SCB API types based on OpenAPI spec
+// ConfigResponse schema - matches PxAPI 2.0 specification exactly
+// See: https://github.com/PxTools/PxApiSpecs/blob/master/PxAPI-2.yml#L675
 export const ConfigResponseSchema = z.object({
     apiVersion: z.string(),
-    appVersion: z.string().optional(),
+    appVersion: z.string(), // Required per PxAPI 2.0 spec
     languages: z.array(z.object({
         id: z.string(),
         label: z.string()
@@ -16,6 +18,8 @@ export const ConfigResponseSchema = z.object({
         language: z.string(),
         text: z.string()
     })).optional(),
+    defaultDataFormat: z.string(), // Required per PxAPI 2.0 spec
+    dataFormats: z.array(z.string()), // Required per PxAPI 2.0 spec
     features: z.array(z.object({
         id: z.string(),
         params: z.array(z.object({

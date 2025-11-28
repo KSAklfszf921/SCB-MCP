@@ -1,7 +1,7 @@
 import { z } from 'zod';
 export declare const ConfigResponseSchema: z.ZodObject<{
     apiVersion: z.ZodString;
-    appVersion: z.ZodOptional<z.ZodString>;
+    appVersion: z.ZodString;
     languages: z.ZodArray<z.ZodObject<{
         id: z.ZodString;
         label: z.ZodString;
@@ -27,6 +27,8 @@ export declare const ConfigResponseSchema: z.ZodObject<{
         language: string;
         text: string;
     }>, "many">>;
+    defaultDataFormat: z.ZodString;
+    dataFormats: z.ZodArray<z.ZodString, "many">;
     features: z.ZodOptional<z.ZodArray<z.ZodObject<{
         id: z.ZodString;
         params: z.ZodOptional<z.ZodArray<z.ZodObject<{
@@ -54,6 +56,7 @@ export declare const ConfigResponseSchema: z.ZodObject<{
     }>, "many">>;
 }, "strip", z.ZodTypeAny, {
     apiVersion: string;
+    appVersion: string;
     languages: {
         id: string;
         label: string;
@@ -63,7 +66,8 @@ export declare const ConfigResponseSchema: z.ZodObject<{
     maxCallsPerTimeWindow: number;
     timeWindow: number;
     license: string;
-    appVersion?: string | undefined;
+    defaultDataFormat: string;
+    dataFormats: string[];
     sourceReferences?: {
         language: string;
         text: string;
@@ -77,6 +81,7 @@ export declare const ConfigResponseSchema: z.ZodObject<{
     }[] | undefined;
 }, {
     apiVersion: string;
+    appVersion: string;
     languages: {
         id: string;
         label: string;
@@ -86,7 +91,8 @@ export declare const ConfigResponseSchema: z.ZodObject<{
     maxCallsPerTimeWindow: number;
     timeWindow: number;
     license: string;
-    appVersion?: string | undefined;
+    defaultDataFormat: string;
+    dataFormats: string[];
     sourceReferences?: {
         language: string;
         text: string;

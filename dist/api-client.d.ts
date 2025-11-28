@@ -9,6 +9,11 @@ export declare class SCBApiClient {
     private checkRateLimit;
     private makeRequest;
     getConfig(): Promise<ConfigResponse>;
+    /**
+     * @deprecated The /navigation endpoint has been removed in SCB API v2.0 (production).
+     * Use searchTables() instead to browse available tables.
+     * See: https://www.scb.se/en/services/open-data-api/pxwebapi/pxapi-2.0
+     */
     getNavigation(folderId?: string, lang?: string): Promise<FolderResponse>;
     searchTables(params?: {
         query?: string;

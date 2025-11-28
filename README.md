@@ -306,7 +306,7 @@ results = scb.search_tables(query="environment", category="environment", limit=5
 ```python
 # Lerum kommun
 region = scb.find_region_code(query="Lerum")
-# Returnerar: code="1484", name="Lerum"
+# Returnerar: code="1441", name="Lerum"
 
 # Större regioner
 region = scb.find_region_code(query="Stockholm")

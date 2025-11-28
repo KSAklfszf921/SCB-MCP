@@ -2,6 +2,34 @@
 
 Alla viktiga ändringar i projektet dokumenteras i denna fil.
 
+## [2.5.0] - 2025-11-28
+
+### Kritiskt
+- **API-endpoint migrerad till produktion** - Bytt från beta (`api.scb.se/OV0104/v2beta/api/v2`) till produktion (`statistikdatabasen.scb.se/api/v2`)
+- **Navigation endpoint borttagen** - `/navigation` finns inte längre i SCB API v2.0, `getNavigation()` kastar nu tydligt felmeddelande
+
+### Tillagt
+- **`effective_selection` i responses** - `scb_get_table_data` och `scb_preview_data` visar nu vilken selection som faktiskt användes
+- **Kategorivalidering** - `scb_search_tables` returnerar nu fel vid ogiltig kategori med lista på giltiga värden
+- **Förbättrad regionssökning** - `scb_find_region_code` använder nu samma inbyggda regionslista som `scb_search_regions` för snabbare svar
+- **Fallback vid API-fel** - Om API-sökning misslyckas faller regionssökning tillbaka på lokal databas
+
+### Ändrat
+- **`scb_test_selection` accepterar tom selection** - Returnerar nu info om default-beteende istället för fel
+- **`scb_check_usage` returnerar JSON** - Strukturerat format med `usage`, `status`, `tips`, `api_info`
+- **`scb_get_api_status` returnerar JSON** - Strukturerat format med `api`, `current_usage`, `citation`, `tips`
+- **Alla exempel-ID:n uppdaterade** - Bytt från `BE0101N1` till `TAB4552`/`TAB4560` (TAB-format)
+- **Förstärkt dokumentation** - Tydligare betoning på svenska söktermer för bättre resultat
+
+### Fixat
+- **Schema matchar nu PxAPI 2.0 spec** - `appVersion`, `defaultDataFormat`, `dataFormats` är nu required per spec
+- **Tool descriptions synkroniserade** - Schema och beskrivningar matchar nu faktiskt beteende
+
+### Tekniskt
+- Verifierad mot officiell PxAPI 2.0 OpenAPI-specifikation
+- Alla endpoints testade mot produktions-API
+- TypeScript-typer uppdaterade för striktare validering
+
 ## [2.4.2] - 2025-11-28
 
 ### Tillagt

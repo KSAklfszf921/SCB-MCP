@@ -17,7 +17,7 @@ export class SCBApiClient {
   private requestCount = 0;
   private windowStartTime = new Date();
 
-  constructor(baseUrl = 'https://api.scb.se/OV0104/v2beta/api/v2') {
+  constructor(baseUrl = 'https://statistikdatabasen.scb.se/api/v2') {
     this.baseUrl = baseUrl;
   }
 
@@ -139,11 +139,17 @@ export class SCBApiClient {
     return this.makeRequest('/config', ConfigResponseSchema);
   }
 
+  /**
+   * @deprecated The /navigation endpoint has been removed in SCB API v2.0 (production).
+   * Use searchTables() instead to browse available tables.
+   * See: https://www.scb.se/en/services/open-data-api/pxwebapi/pxapi-2.0
+   */
   async getNavigation(folderId?: string, lang = 'en'): Promise<FolderResponse> {
-    const endpoint = folderId 
-      ? `/navigation/${folderId}?lang=${lang}`
-      : `/navigation?lang=${lang}`;
-    return this.makeRequest(endpoint, FolderResponseSchema);
+    throw new Error(
+      'The /navigation endpoint has been removed in SCB API v2.0. ' +
+      'Use scb_search_tables to find tables instead. ' +
+      'See: https://www.scb.se/en/services/open-data-api/pxwebapi/pxapi-2.0'
+    );
   }
 
   async searchTables(params: {
