@@ -272,7 +272,7 @@ export class SCBMCPServer {
             },
             category: {
               type: 'string',
-              description: 'Filter by category: "population", "labour", "economy", "housing", "environment", "education", "health"',
+              description: 'Filter by category: "population", "labour", "economy", "housing", "environment", "education", "health", "transport"',
             },
           },
         },
@@ -619,7 +619,8 @@ export class SCBMCPServer {
       'housing': ['housing', 'bostad', 'boende', 'dwelling', 'lägenhet', 'apartment', 'hus', 'house', 'hyra', 'rent', 'fastighet', 'property', 'byggnation', 'construction'],
       'environment': ['miljö', 'environment', 'utsläpp', 'emission', 'klimat', 'climate', 'energi', 'energy', 'avfall', 'waste', 'vatten', 'water', 'luft', 'air'],
       'education': ['utbildning', 'education', 'skola', 'school', 'student', 'elev', 'universitet', 'university', 'högskola', 'examen', 'degree'],
-      'health': ['hälsa', 'health', 'sjukvård', 'healthcare', 'sjukdom', 'disease', 'vård', 'care', 'dödsorsak', 'cause of death']
+      'health': ['hälsa', 'health', 'sjukvård', 'healthcare', 'sjukdom', 'disease', 'vård', 'care', 'dödsorsak', 'cause of death'],
+      'transport': ['transport', 'trafik', 'traffic', 'fordon', 'vehicle', 'bil', 'car', 'kollektivtrafik', 'public transport', 'flyg', 'aviation', 'järnväg', 'railway', 'resa', 'travel', 'gods', 'freight', 'infrastruktur', 'infrastructure']
     };
 
     const validCategories = Object.keys(categoryKeywords);
@@ -1567,22 +1568,69 @@ ${Object.entries(selection).map(([key, values]) => `- ${key}: [${values.join(', 
     const { tableId, selection } = args;
     const langValidation = validateLanguage(args.language);
     const language = langValidation.language;
-    
+
     try {
-      // Create a limited selection for preview
-      let previewSelection = selection;
-      
+      // First, get table metadata to understand the structure
+      const metadata = await this.apiClient.getTableMetadata(tableId, language);
+      const dimensions = Object.entries(metadata.dimension || {});
+
+      // Calculate total possible cells to determine if we need smart limiting
+      const totalPossibleCells = dimensions.reduce((acc, [_, dim]) => {
+        return acc * Object.keys(dim.category.index).length;
+      }, 1);
+
+      // Create a smart limited selection for preview
+      let previewSelection: Record<string, string[]> = {};
+
       if (selection) {
-        // Limit each variable to at most 3 values or use special expressions
-        previewSelection = {};
+        // User provided selection - limit each variable
         for (const [key, values] of Object.entries(selection)) {
           if (values.some(v => v === '*' || v.startsWith('TOP(') || v.startsWith('BOTTOM('))) {
-            // Replace * with TOP(3) for preview, keep other expressions
-            previewSelection[key] = values.map(v => v === '*' ? 'TOP(3)' : v);
+            // Replace * with TOP(2) for preview, limit TOP/BOTTOM to max 3
+            previewSelection[key] = values.map(v => {
+              if (v === '*') return 'TOP(2)';
+              const topMatch = v.match(/^TOP\((\d+)\)$/);
+              if (topMatch && parseInt(topMatch[1]) > 3) return 'TOP(3)';
+              const bottomMatch = v.match(/^BOTTOM\((\d+)\)$/);
+              if (bottomMatch && parseInt(bottomMatch[1]) > 3) return 'BOTTOM(3)';
+              return v;
+            });
           } else {
-            // Limit to first 3 values
-            previewSelection[key] = values.slice(0, 3);
+            // Limit to first 2 values
+            previewSelection[key] = values.slice(0, 2);
           }
+        }
+      } else {
+        // No selection provided - create smart defaults for ALL dimensions
+        // This is the key fix: we must provide values for all dimensions
+        for (const [varCode, varDef] of dimensions) {
+          const valueCount = Object.keys(varDef.category.index).length;
+          const values = Object.keys(varDef.category.index);
+
+          // For time variables, get the latest
+          if (varCode.toLowerCase() === 'tid' || varCode.toLowerCase() === 'time') {
+            previewSelection[varCode] = ['TOP(1)'];
+          }
+          // For content variables, take first one
+          else if (varCode.toLowerCase() === 'contentscode') {
+            previewSelection[varCode] = [values[0]];
+          }
+          // For other variables with few values, take all
+          else if (valueCount <= 3) {
+            previewSelection[varCode] = values;
+          }
+          // For variables with many values, take first 2
+          else {
+            previewSelection[varCode] = values.slice(0, 2);
+          }
+        }
+      }
+
+      // Ensure all mandatory dimensions are covered
+      for (const [varCode, varDef] of dimensions) {
+        if (!previewSelection[varCode]) {
+          const values = Object.keys(varDef.category.index);
+          previewSelection[varCode] = values.length <= 3 ? values : values.slice(0, 2);
         }
       }
 
@@ -1654,23 +1702,56 @@ ${structuredData.data.slice(0, 5).map(record => {
     } catch (error) {
       const errorMessage = error instanceof Error ? error.message : String(error);
 
+      // Determine error type for better suggestions
+      const is500Error = errorMessage.includes('500');
+      const isValidationError = errorMessage.includes('validation') || errorMessage.includes('Missing mandatory');
+      const isNotFoundError = errorMessage.includes('404') || errorMessage.includes('not found');
+
+      let errorType = 'preview_failed';
+      let suggestions: string[] = [];
+
+      if (is500Error) {
+        errorType = 'table_too_complex';
+        suggestions = [
+          'This table may be too large for preview without selection',
+          'Try providing a specific selection: scb_preview_data(tableId, selection: {"Region": ["0180"], "Tid": ["TOP(1)"]})',
+          'Use scb_get_table_variables to see available variables first',
+          'Some tables with many dimensions require explicit selection'
+        ];
+      } else if (isValidationError) {
+        errorType = 'invalid_selection';
+        suggestions = [
+          'Use scb_test_selection to validate your selection first',
+          'Check variable names with scb_get_table_variables',
+          'Make sure all mandatory variables are included'
+        ];
+      } else if (isNotFoundError) {
+        errorType = 'table_not_found';
+        suggestions = [
+          'Verify the table ID is correct (e.g., "TAB638", "TAB4552")',
+          'Use scb_search_tables to find valid table IDs'
+        ];
+      } else {
+        suggestions = [
+          'Use scb_test_selection to validate your selection first',
+          'Check variable names with scb_get_table_variables',
+          'Verify region codes with scb_find_region_code'
+        ];
+      }
+
       return {
         content: [
           {
             type: 'text',
             text: JSON.stringify({
               error: {
-                type: "preview_failed",
+                type: errorType,
                 message: errorMessage,
                 table_id: tableId,
                 language_used: language,
                 language_warning: langValidation.warning || null
               },
-              suggestions: [
-                "Use scb_test_selection to validate your selection first",
-                "Check variable names with scb_get_table_variables",
-                "Verify region codes with scb_find_region_code"
-              ]
+              suggestions
             }, null, 2)
           },
         ],

@@ -2,6 +2,28 @@
 
 Alla viktiga ändringar i projektet dokumenteras i denna fil.
 
+## [2.5.3] - 2025-11-28
+
+### Fixat
+- **scb_preview_data förbättrad** - Nu skapar smart default-selection för ALLA dimensioner:
+  - Hämtar tabellmetadata först för att förstå strukturen
+  - Skapar automatiskt begränsad selection för varje dimension
+  - Tid-variabler: `TOP(1)` (senaste perioden)
+  - ContentsCode: första värdet
+  - Andra variabler: alla om ≤3 värden, annars första 2
+  - Fungerar nu med komplexa tabeller som TAB638 (6 dimensioner)
+
+- **Förbättrad felhantering i preview** - Specifika feltyper:
+  - `table_too_complex` - För 500-fel med hjälpsamma tips
+  - `invalid_selection` - För valideringsfel
+  - `table_not_found` - För 404-fel
+  - Varje feltyp har anpassade suggestions
+
+### Tillagt
+- **Transport-kategori** i `scb_search_tables`:
+  - Nyckelord: transport, trafik, fordon, bil, kollektivtrafik, flyg, järnväg, gods, infrastruktur
+  - Nu 8 kategorier: population, labour, economy, housing, environment, education, health, transport
+
 ## [2.5.2] - 2025-11-28
 
 ### Tillagt
