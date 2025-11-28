@@ -1,7 +1,8 @@
 <img width="640" height="320" alt="MCP SERVER" src="https://github.com/user-attachments/assets/8183270f-cc19-4513-a26b-c8c18e60f1d8" />
 
 [![MCP Registry](https://img.shields.io/badge/MCP%20Registry-Published-brightgreen)](https://registry.modelcontextprotocol.io/servers/io.github.isakskogstad/scb-mcp)
-
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](LICENSE) 
+[![Server Status](https://img.shields.io/website?url=https://scb-mcp.onrender.com%2Fhealth&label=Server%20Status&up_message=online&down_message=offline)](https://riksdag-regering-ai.onrender.com/health)
 # 📊 SCB MCP Server
 
 
