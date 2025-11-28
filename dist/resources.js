@@ -1,4 +1,6 @@
-// Common Swedish regions with codes
+import { ALL_REGIONS, REGION_STATS, COUNTIES, MUNICIPALITIES } from './regions.js';
+import { LLM_INSTRUCTIONS, STATISTICS_CATEGORIES, USAGE_TIPS } from './instructions.js';
+// Common Swedish regions with codes (legacy - kept for backwards compatibility)
 export const commonRegions = [
     // Country level
     { code: '00', name: 'Riket (hela Sverige)', type: 'country' },
@@ -91,15 +93,33 @@ export const categories = [
 // MCP Resources definitions
 export const resources = [
     {
+        uri: 'scb://guide/instructions',
+        name: 'LLM Instructions (Start Here!)',
+        description: 'Complete instructions for AI assistants using SCB MCP Server - read this first!',
+        mimeType: 'text/markdown',
+    },
+    {
+        uri: 'scb://guide/categories',
+        name: 'Statistics Categories',
+        description: 'Detailed guide to SCB statistical categories with search terms',
+        mimeType: 'application/json',
+    },
+    {
+        uri: 'scb://regions/all',
+        name: 'All Swedish Regions (312)',
+        description: 'Complete database of all Swedish regions - 21 counties and 290 municipalities',
+        mimeType: 'application/json',
+    },
+    {
         uri: 'scb://regions/counties',
         name: 'Swedish Counties (Län)',
-        description: 'List of all Swedish counties with their region codes',
+        description: 'List of all 21 Swedish counties with their region codes',
         mimeType: 'application/json',
     },
     {
         uri: 'scb://regions/municipalities',
-        name: 'Major Swedish Municipalities',
-        description: 'List of major Swedish municipalities with their region codes',
+        name: 'All Swedish Municipalities (290)',
+        description: 'Complete list of all 290 Swedish municipalities with their region codes',
         mimeType: 'application/json',
     },
     {
@@ -124,11 +144,42 @@ export const resources = [
 // Get resource content by URI
 export function getResourceContent(uri) {
     switch (uri) {
+        case 'scb://guide/instructions':
+            return {
+                content: LLM_INSTRUCTIONS,
+                mimeType: 'text/markdown'
+            };
+        case 'scb://guide/categories':
+            return {
+                content: JSON.stringify({
+                    description: 'Statistics categories available in SCB with search terms and examples',
+                    total_categories: Object.keys(STATISTICS_CATEGORIES).length,
+                    categories: STATISTICS_CATEGORIES,
+                    tips: USAGE_TIPS
+                }, null, 2),
+                mimeType: 'application/json'
+            };
+        case 'scb://regions/all':
+            return {
+                content: JSON.stringify({
+                    description: 'Complete database of all Swedish regions',
+                    statistics: REGION_STATS,
+                    regions: ALL_REGIONS.map(r => ({
+                        code: r.code,
+                        name: r.name,
+                        type: r.type,
+                        county: r.countyCode || null
+                    })),
+                    usage: 'Use the "code" value in Region selections, e.g., {"Region": ["1482"]} for Kungälv'
+                }, null, 2),
+                mimeType: 'application/json'
+            };
         case 'scb://regions/counties':
             return {
                 content: JSON.stringify({
-                    description: 'Swedish counties (län) with 2-digit region codes',
-                    regions: commonRegions.filter(r => r.type === 'county'),
+                    description: 'All 21 Swedish counties (län) with 2-digit region codes',
+                    total: COUNTIES.length,
+                    regions: COUNTIES.map(r => ({ code: r.code, name: r.name })),
                     usage: 'Use the "code" value in Region selections, e.g., {"Region": ["01"]} for Stockholm county'
                 }, null, 2),
                 mimeType: 'application/json'
@@ -136,8 +187,13 @@ export function getResourceContent(uri) {
         case 'scb://regions/municipalities':
             return {
                 content: JSON.stringify({
-                    description: 'Major Swedish municipalities (kommun) with 4-digit region codes',
-                    regions: commonRegions.filter(r => r.type === 'municipality'),
+                    description: 'All 290 Swedish municipalities (kommun) with 4-digit region codes',
+                    total: MUNICIPALITIES.length,
+                    regions: MUNICIPALITIES.map(r => ({
+                        code: r.code,
+                        name: r.name,
+                        county: r.countyCode ? COUNTIES.find(c => c.code === r.countyCode)?.name : null
+                    })),
                     usage: 'Use the "code" value in Region selections, e.g., {"Region": ["0180"]} for Stockholm municipality'
                 }, null, 2),
                 mimeType: 'application/json'

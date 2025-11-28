@@ -13,6 +13,8 @@ import {
 import { fileURLToPath } from 'url';
 import { SCBApiClient } from './api-client.js';
 import { resources, getResourceContent } from './resources.js';
+import { ALL_REGIONS, searchRegions, findRegion, REGION_STATS, normalizeForSearch } from './regions.js';
+import { LLM_INSTRUCTIONS, STATISTICS_CATEGORIES, WORKFLOW_TEMPLATES, USAGE_TIPS, getCategoryDescriptions } from './instructions.js';
 
 // ============================================================================
 // CONSTANTS AND HELPERS
@@ -105,7 +107,7 @@ export class SCBMCPServer {
     this.server = new Server(
       {
         name: 'SCB MCP Server',
-        version: '2.5.0',
+        version: '2.5.1',
       },
       {
         capabilities: {
@@ -865,76 +867,15 @@ ${result.page.totalElements > 50 ? `💡 **Search Tips:**
     const langValidation = validateLanguage(args.language);
     const language = langValidation.language;
 
-    // Common regions for fallback and fuzzy matching
-    const commonRegions = [
-      { code: '00', name: 'Riket (hela Sverige)', type: 'country' },
-      { code: '01', name: 'Stockholms län', type: 'county' },
-      { code: '03', name: 'Uppsala län', type: 'county' },
-      { code: '04', name: 'Södermanlands län', type: 'county' },
-      { code: '05', name: 'Östergötlands län', type: 'county' },
-      { code: '06', name: 'Jönköpings län', type: 'county' },
-      { code: '07', name: 'Kronobergs län', type: 'county' },
-      { code: '08', name: 'Kalmar län', type: 'county' },
-      { code: '09', name: 'Gotlands län', type: 'county' },
-      { code: '10', name: 'Blekinge län', type: 'county' },
-      { code: '12', name: 'Skåne län', type: 'county' },
-      { code: '13', name: 'Hallands län', type: 'county' },
-      { code: '14', name: 'Västra Götalands län', type: 'county' },
-      { code: '17', name: 'Värmlands län', type: 'county' },
-      { code: '18', name: 'Örebro län', type: 'county' },
-      { code: '19', name: 'Västmanlands län', type: 'county' },
-      { code: '20', name: 'Dalarnas län', type: 'county' },
-      { code: '21', name: 'Gävleborgs län', type: 'county' },
-      { code: '22', name: 'Västernorrlands län', type: 'county' },
-      { code: '23', name: 'Jämtlands län', type: 'county' },
-      { code: '24', name: 'Västerbottens län', type: 'county' },
-      { code: '25', name: 'Norrbottens län', type: 'county' },
-      { code: '0180', name: 'Stockholm', type: 'municipality' },
-      { code: '1480', name: 'Göteborg', type: 'municipality' },
-      { code: '1280', name: 'Malmö', type: 'municipality' },
-      { code: '1441', name: 'Lerum', type: 'municipality' },
-      { code: '1484', name: 'Lysekil', type: 'municipality' },
-      { code: '0380', name: 'Uppsala', type: 'municipality' },
-      { code: '1281', name: 'Lund', type: 'municipality' },
-      { code: '0580', name: 'Linköping', type: 'municipality' },
-      { code: '1880', name: 'Örebro', type: 'municipality' },
-      { code: '0680', name: 'Jönköping', type: 'municipality' },
-      { code: '2580', name: 'Luleå', type: 'municipality' },
-      { code: '2480', name: 'Umeå', type: 'municipality' },
-    ];
-
     try {
-      // First, try fuzzy matching against common regions
-      const fuzzyMatches = commonRegions.filter(region =>
-        fuzzyMatchRegion(query, region.name, region.code)
-      );
+      // Use the complete regions database with fuzzy matching
+      const matches = searchRegions(query);
 
-      // Also try API search
-      let apiRegions: Array<{ code: string; name: string; type: string }> = [];
-      try {
-        apiRegions = await this.apiClient.searchRegions(query, language);
-      } catch {
-        // API search failed, continue with fuzzy matches
-      }
+      if (matches.length === 0) {
+        // Show sample regions when no match found
+        const sampleCounties = ALL_REGIONS.filter(r => r.type === 'county').slice(0, 5);
+        const sampleMunicipalities = ALL_REGIONS.filter(r => r.type === 'municipality').slice(0, 5);
 
-      // Combine results, prioritizing fuzzy matches
-      const allMatches = new Map<string, { code: string; name: string; type: string }>();
-
-      // Add fuzzy matches first
-      for (const match of fuzzyMatches) {
-        allMatches.set(match.code, match);
-      }
-
-      // Add API results
-      for (const region of apiRegions) {
-        if (!allMatches.has(region.code)) {
-          allMatches.set(region.code, region);
-        }
-      }
-
-      const regions = Array.from(allMatches.values());
-
-      if (regions.length === 0) {
         return {
           content: [
             {
@@ -945,11 +886,17 @@ ${result.page.totalElements > 50 ? `💡 **Search Tips:**
                 message: `No regions found matching "${query}"`,
                 language_used: language,
                 language_warning: langValidation.warning || null,
-                common_regions: commonRegions.slice(0, 10),
+                database_info: {
+                  total_regions: REGION_STATS.total,
+                  counties: REGION_STATS.counties,
+                  municipalities: REGION_STATS.municipalities
+                },
+                sample_counties: sampleCounties.map(r => ({ code: r.code, name: r.name })),
+                sample_municipalities: sampleMunicipalities.map(r => ({ code: r.code, name: r.name })),
                 tips: [
-                  'Try Swedish spelling (e.g., "Göteborg" instead of "Gothenburg")',
-                  'Fuzzy matching works: "Goteborg" will match "Göteborg"',
-                  'Use scb_find_region_code with a tableId for table-specific regions',
+                  'Fuzzy matching is enabled: "Goteborg" will match "Göteborg"',
+                  'Try partial names: "kung" will match "Kungälv"',
+                  'Use region code directly: "1482" for Kungälv',
                   'Region codes: 2 digits = county (län), 4 digits = municipality (kommun)'
                 ]
               }, null, 2)
@@ -964,18 +911,25 @@ ${result.page.totalElements > 50 ? `💡 **Search Tips:**
             type: 'text',
             text: JSON.stringify({
               query: query,
-              total_matches: regions.length,
+              total_matches: matches.length,
               language_used: language,
               language_warning: langValidation.warning || null,
-              regions: regions.slice(0, 20).map(r => ({
+              source: 'local_database',
+              database_info: {
+                total_regions: REGION_STATS.total,
+                counties: REGION_STATS.counties,
+                municipalities: REGION_STATS.municipalities
+              },
+              regions: matches.slice(0, 20).map(r => ({
                 code: r.code,
                 name: r.name,
                 type: r.type,
+                county: r.countyCode ? ALL_REGIONS.find(c => c.code === r.countyCode)?.name : null,
                 usage_example: { Region: [r.code] }
               })),
               tips: [
                 'Use the "code" value in your data selections',
-                'Format: {"Region": ["' + regions[0].code + '"]}',
+                'Format: {"Region": ["' + matches[0].code + '"]}',
                 'You can select multiple regions: {"Region": ["code1", "code2"]}'
               ]
             }, null, 2)
@@ -988,8 +942,8 @@ ${result.page.totalElements > 50 ? `💡 **Search Tips:**
         message: error instanceof Error ? error.message : String(error),
         details: { query, language },
         suggestions: [
-          'Try scb_find_region_code with a specific tableId for more reliable results',
-          'Check spelling or try Swedish names (e.g., "Göteborg")'
+          'Try Swedish names (e.g., "Göteborg")',
+          'Fuzzy matching works: "Goteborg" matches "Göteborg"'
         ]
       });
     }
@@ -1145,55 +1099,16 @@ ${variableData.map(v =>
     const langValidation = validateLanguage(args.language);
     const language = langValidation.language;
 
-    // Common regions for fallback and immediate matching (same as handleSearchRegions)
-    const commonRegions = [
-      { code: '00', name: 'Riket (hela Sverige)', type: 'country' },
-      { code: '01', name: 'Stockholms län', type: 'county' },
-      { code: '03', name: 'Uppsala län', type: 'county' },
-      { code: '04', name: 'Södermanlands län', type: 'county' },
-      { code: '05', name: 'Östergötlands län', type: 'county' },
-      { code: '06', name: 'Jönköpings län', type: 'county' },
-      { code: '07', name: 'Kronobergs län', type: 'county' },
-      { code: '08', name: 'Kalmar län', type: 'county' },
-      { code: '09', name: 'Gotlands län', type: 'county' },
-      { code: '10', name: 'Blekinge län', type: 'county' },
-      { code: '12', name: 'Skåne län', type: 'county' },
-      { code: '13', name: 'Hallands län', type: 'county' },
-      { code: '14', name: 'Västra Götalands län', type: 'county' },
-      { code: '17', name: 'Värmlands län', type: 'county' },
-      { code: '18', name: 'Örebro län', type: 'county' },
-      { code: '19', name: 'Västmanlands län', type: 'county' },
-      { code: '20', name: 'Dalarnas län', type: 'county' },
-      { code: '21', name: 'Gävleborgs län', type: 'county' },
-      { code: '22', name: 'Västernorrlands län', type: 'county' },
-      { code: '23', name: 'Jämtlands län', type: 'county' },
-      { code: '24', name: 'Västerbottens län', type: 'county' },
-      { code: '25', name: 'Norrbottens län', type: 'county' },
-      { code: '0180', name: 'Stockholm', type: 'municipality' },
-      { code: '1480', name: 'Göteborg', type: 'municipality' },
-      { code: '1280', name: 'Malmö', type: 'municipality' },
-      { code: '1441', name: 'Lerum', type: 'municipality' },
-      { code: '1484', name: 'Lysekil', type: 'municipality' },
-      { code: '0380', name: 'Uppsala', type: 'municipality' },
-      { code: '1281', name: 'Lund', type: 'municipality' },
-      { code: '0580', name: 'Linköping', type: 'municipality' },
-      { code: '1880', name: 'Örebro', type: 'municipality' },
-      { code: '0680', name: 'Jönköping', type: 'municipality' },
-      { code: '2580', name: 'Luleå', type: 'municipality' },
-      { code: '2480', name: 'Umeå', type: 'municipality' },
-    ];
+    // FIRST: Try to match against complete regions database (fast, no API call needed)
+    const localMatches = searchRegions(query);
 
-    // FIRST: Try to match against common regions (fast, no API call needed)
-    const commonMatches = commonRegions.filter(region =>
-      fuzzyMatchRegion(query, region.name, region.code)
-    );
-
-    if (commonMatches.length > 0 && !tableId) {
-      // Found in common regions - return immediately without API call
-      const results = commonMatches.map(r => ({
+    if (localMatches.length > 0 && !tableId) {
+      // Found in local database - return immediately without API call
+      const results = localMatches.slice(0, 10).map(r => ({
         code: r.code,
         name: r.name,
         type: r.type,
+        county: r.countyCode ? ALL_REGIONS.find(c => c.code === r.countyCode)?.name : null,
         match_type: 'exact'
       }));
 
@@ -1205,268 +1120,213 @@ ${variableData.map(v =>
               query: query,
               matches: results,
               match_type: 'exact_matches',
-              total_matches: results.length,
+              total_matches: localMatches.length,
               primary_match: results[0],
               usage_example: { Region: [results[0].code] },
               language_used: language,
               language_warning: langValidation.warning || null,
-              source: 'common_regions_cache',
-              note: 'Matched from built-in region database. Use tableId parameter for table-specific region codes.'
+              source: 'local_database',
+              database_info: {
+                total_regions: REGION_STATS.total,
+                counties: REGION_STATS.counties,
+                municipalities: REGION_STATS.municipalities
+              },
+              note: 'Matched from complete Swedish region database. Use tableId parameter to verify table-specific region codes.'
             }, null, 2)
           }
         ]
       };
     }
 
-    // SECOND: If not found in common regions or tableId specified, search via API
-    try {
-      let targetTableId: string;
+    // SECOND: If not found locally or tableId specified, search via API for table-specific codes
+    if (tableId) {
+      try {
+        const metadata = await this.apiClient.getTableMetadata(tableId, language);
 
-      if (tableId) {
-        // Use the specified table directly
-        targetTableId = tableId;
-      } else {
-        // Look for a common population table that has region data
-        const searchResults = await this.apiClient.searchTables({
-          query: 'befolkning kommun region',
-          pageSize: 10,
-          lang: language
-        });
+        if (!metadata.dimension || !metadata.dimension['Region']) {
+          // No Region dimension - fall back to local database
+          if (localMatches.length > 0) {
+            const results = localMatches.slice(0, 10).map(r => ({
+              code: r.code,
+              name: r.name,
+              type: r.type,
+              match_type: 'local_fallback'
+            }));
 
-        // Find tables with Region variable
-        const regionTables = searchResults.tables.filter(table =>
-          table.variableNames?.some(v => v.toLowerCase().includes('region')) &&
-          (table.label.toLowerCase().includes('population') || table.label.toLowerCase().includes('befolkning'))
-        );
+            return {
+              content: [
+                {
+                  type: 'text',
+                  text: JSON.stringify({
+                    query: query,
+                    matches: results,
+                    match_type: 'local_fallback',
+                    primary_match: results[0],
+                    usage_example: { Region: [results[0].code] },
+                    language_used: language,
+                    language_warning: langValidation.warning || null,
+                    source: 'local_database',
+                    note: `Table ${tableId} does not have a Region dimension. Using local database match.`
+                  }, null, 2)
+                }
+              ]
+            };
+          }
 
-        if (regionTables.length === 0) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                query: query,
-                matches: [],
-                error: "No suitable regional tables found",
-                language_used: language,
-                language_warning: langValidation.warning || null,
-                common_codes: [
-                  { code: "0180", name: "Stockholm" },
-                  { code: "1480", name: "Gothenburg" },
-                  { code: "1280", name: "Malmö" },
-                  { code: "1441", name: "Lerum" },
-                  { code: "0380", name: "Uppsala" }
-                ],
-                suggestion: "Use scb_search_regions to find relevant tables manually"
-              }, null, 2)
-            },
-          ],
-        };
-        }
-
-        // Use the first suitable table to get region information
-        targetTableId = regionTables[0].id;
-      }
-
-      // Now use targetTableId (either specified or found)
-      const metadata = await this.apiClient.getTableMetadata(targetTableId, language);
-      
-      if (!metadata.dimension || !metadata.dimension['Region']) {
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                query: query,
-                error: `Could not access region data from table ${targetTableId}`,
-                language_used: language,
-                language_warning: langValidation.warning || null,
-                suggestion: `Use scb_get_table_variables with tableId="${targetTableId}" to explore available regions manually`,
-                source_table: targetTableId
-              }, null, 2)
-            },
-          ],
-        };
-      }
-
-      const regionDimension = metadata.dimension['Region'];
-      const regionEntries = Object.entries(regionDimension.category.index);
-      const regionLabels = regionDimension.category.label || {};
-
-      // Search for the query in region labels and codes using fuzzy matching
-      const exactMatches = regionEntries.filter(([code]) => {
-        const label = regionLabels[code] || '';
-        return fuzzyMatchRegion(query, label, code);
-      });
-
-      if (exactMatches.length === 0) {
-        // Do a word-based search for partial matches
-        const partialMatches = regionEntries.filter(([code]) => {
-          const label = regionLabels[code] || '';
-          const queryWords = normalizeSwedish(query).split(' ');
-          const normalizedLabel = normalizeSwedish(label);
-          return queryWords.some(word =>
-            normalizedLabel.includes(word) || code.includes(word)
-          );
-        }).slice(0, 10);
-
-        if (partialMatches.length === 0) {
           return {
             content: [
               {
                 type: 'text',
                 text: JSON.stringify({
                   query: query,
-                  matches: [],
-                  error: `No regions found matching "${query}"`,
+                  error: `Table ${tableId} does not have a Region dimension`,
                   language_used: language,
                   language_warning: langValidation.warning || null,
-                  common_codes: [
-                    { code: "0180", name: "Stockholm" },
-                    { code: "1480", name: "Gothenburg (Göteborg)" },
-                    { code: "1280", name: "Malmö" },
-                    { code: "1441", name: "Lerum" },
-                    { code: "0380", name: "Uppsala" }
-                  ],
-                  source_table: {
-                    id: targetTableId,
-                    name: metadata.label
-                  },
-                  suggestion: `Use scb_get_table_variables with tableId="${targetTableId}" and variableName="Region" to see all available regions`
+                  suggestion: `Use scb_get_table_variables with tableId="${tableId}" to see available dimensions`
                 }, null, 2)
               },
             ],
           };
         }
 
-        const partialResults = partialMatches.map(([code, index]) => ({
-          code,
-          name: regionLabels[code] || 'Unknown region',
-          match_type: 'partial'
-        }));
+        const regionDimension = metadata.dimension['Region'];
+        const regionLabels = regionDimension.category.label || {};
 
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                query: query,
-                matches: partialResults,
-                match_type: 'partial_matches',
-                primary_match: partialResults[0],
-                usage_example: { Region: [partialResults[0].code] },
-                language_used: language,
-                language_warning: langValidation.warning || null,
-                source_table: {
-                  id: targetTableId,
-                  name: metadata.label
-                }
-              }, null, 2)
-            },
-          ],
-        };
-      }
+        // Search for the query in table's region labels
+        const normalizedQuery = normalizeForSearch(query);
+        const tableMatches = Object.entries(regionLabels).filter(([code, label]) => {
+          const normalizedLabel = normalizeForSearch(label as string);
+          return normalizedLabel.includes(normalizedQuery) ||
+                 normalizedQuery.includes(normalizedLabel) ||
+                 code === query ||
+                 code.includes(query);
+        });
 
-      // Found exact or close matches
-      const exactResults = exactMatches.slice(0, 5).map(([code, index]) => ({
-        code,
-        name: regionLabels[code] || 'Unknown region',
-        match_type: 'exact'
-      }));
+        if (tableMatches.length > 0) {
+          const results = tableMatches.slice(0, 10).map(([code, label]) => ({
+            code,
+            name: label as string,
+            match_type: 'table_specific'
+          }));
 
-      const structuredData = {
-        query: query,
-        matches: exactResults,
-        match_type: 'exact_matches',
-        total_matches: exactMatches.length,
-        primary_match: exactResults[0],
-        usage_example: { Region: [exactResults[0].code] },
-        language_used: language,
-        language_warning: langValidation.warning || null,
-        source_table: {
-          id: targetTableId,
-          name: metadata.label
-        }
-      };
-
-      const summary = `**🎯 Region Code Found for "${query}"**
-
-✅ **Primary Match:** ${exactResults[0].code} - ${exactResults[0].name}
-
-**All Matches:**
-${exactResults.map(r => `- **${r.code}**: ${r.name}`).join('\n')}
-
-💡 **Usage Example:** \`{"Region": ["${exactResults[0].code}"]}\`
-
-📊 **Source:** ${metadata.label} (${targetTableId})${tableId ? '\n⚠️ **Note:** Searched in specified table for compatibility' : '\n💡 **Note:** Searched in default population table'}`;
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify(structuredData, null, 2)
-          },
-        ],
-      };
-
-    } catch (error) {
-      const errorMessage = error instanceof Error ? error.message : String(error);
-
-      // If API search failed, fall back to common regions one more time
-      const fallbackMatches = commonRegions.filter(region =>
-        fuzzyMatchRegion(query, region.name, region.code)
-      );
-
-      if (fallbackMatches.length > 0) {
-        const results = fallbackMatches.map(r => ({
-          code: r.code,
-          name: r.name,
-          type: r.type,
-          match_type: 'fallback'
-        }));
-
-        return {
-          content: [
-            {
-              type: 'text',
-              text: JSON.stringify({
-                query: query,
-                matches: results,
-                match_type: 'fallback_matches',
-                total_matches: results.length,
-                primary_match: results[0],
-                usage_example: { Region: [results[0].code] },
-                language_used: language,
-                language_warning: langValidation.warning || null,
-                source: 'common_regions_fallback',
-                note: 'API search failed, matched from built-in region database instead.'
-              }, null, 2)
-            }
-          ]
-        };
-      }
-
-      return {
-        content: [
-          {
-            type: 'text',
-            text: JSON.stringify({
-              error: {
-                type: "region_search_failed",
-                message: errorMessage,
-                query: query,
-                language_used: language,
-                language_warning: langValidation.warning || null
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  query: query,
+                  matches: results,
+                  match_type: 'table_specific_matches',
+                  total_matches: tableMatches.length,
+                  primary_match: results[0],
+                  usage_example: { Region: [results[0].code] },
+                  language_used: language,
+                  language_warning: langValidation.warning || null,
+                  source_table: {
+                    id: tableId,
+                    name: metadata.label
+                  },
+                  note: 'Matched from table-specific region codes. These codes are verified to work with this table.'
+                }, null, 2)
               },
-              suggestions: [
-                "Try scb_search_regions to find relevant tables manually",
-                "Verify the tableId if you provided one"
-              ]
-            }, null, 2)
-          },
-        ],
-      };
+            ],
+          };
+        }
+
+        // No match in table - suggest using local database
+        if (localMatches.length > 0) {
+          const results = localMatches.slice(0, 5).map(r => ({
+            code: r.code,
+            name: r.name,
+            type: r.type,
+            match_type: 'local_suggestion'
+          }));
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  query: query,
+                  matches: results,
+                  match_type: 'local_suggestions',
+                  primary_match: results[0],
+                  usage_example: { Region: [results[0].code] },
+                  language_used: language,
+                  language_warning: langValidation.warning || null,
+                  source: 'local_database',
+                  warning: `Region "${query}" not found in table ${tableId}. Showing matches from local database - verify compatibility with your table.`,
+                  source_table: {
+                    id: tableId,
+                    name: metadata.label
+                  }
+                }, null, 2)
+              },
+            ],
+          };
+        }
+
+      } catch (error) {
+        // API failed - fall back to local database
+        if (localMatches.length > 0) {
+          const results = localMatches.slice(0, 10).map(r => ({
+            code: r.code,
+            name: r.name,
+            type: r.type,
+            match_type: 'fallback'
+          }));
+
+          return {
+            content: [
+              {
+                type: 'text',
+                text: JSON.stringify({
+                  query: query,
+                  matches: results,
+                  match_type: 'fallback_matches',
+                  primary_match: results[0],
+                  usage_example: { Region: [results[0].code] },
+                  language_used: language,
+                  language_warning: langValidation.warning || null,
+                  source: 'local_database',
+                  note: 'API search failed. Matched from local Swedish region database.'
+                }, null, 2)
+              }
+            ]
+          };
+        }
+      }
     }
+
+    // No matches found anywhere
+    const sampleMunicipalities = ALL_REGIONS.filter(r => r.type === 'municipality').slice(0, 5);
+
+    return {
+      content: [
+        {
+          type: 'text',
+          text: JSON.stringify({
+            query: query,
+            matches: [],
+            error: `No regions found matching "${query}"`,
+            language_used: language,
+            language_warning: langValidation.warning || null,
+            database_info: {
+              total_regions: REGION_STATS.total,
+              counties: REGION_STATS.counties,
+              municipalities: REGION_STATS.municipalities
+            },
+            sample_regions: sampleMunicipalities.map(r => ({ code: r.code, name: r.name })),
+            tips: [
+              'Try Swedish spelling (e.g., "Göteborg" instead of "Gothenburg")',
+              'Fuzzy matching works: "Goteborg" will match "Göteborg"',
+              'Try partial names: "kung" matches "Kungälv"',
+              'Use scb_search_regions for broader searches'
+            ]
+          }, null, 2)
+        },
+      ],
+    };
   }
 
   private async handleTestSelection(args: { tableId: string; selection?: Record<string, string[]>; language?: string }) {

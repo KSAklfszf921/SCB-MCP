@@ -2,6 +2,38 @@
 
 Alla viktiga ändringar i projektet dokumenteras i denna fil.
 
+## [2.5.1] - 2025-11-28
+
+### Tillagt
+- **Komplett regionsdatabas** - Ny fil `src/regions.ts` med alla 312 svenska regioner:
+  - 1 land (Riket)
+  - 21 län med koder (01-25)
+  - 290 kommuner med koder (0114-2584)
+  - Snabba lokala sökningar utan API-anrop
+  - Fuzzy matching för svenska tecken (ä/a, ö/o, å/a)
+
+- **LLM-instruktioner** - Ny fil `src/instructions.ts` med:
+  - Detaljerade instruktioner för AI-assistenter
+  - 6 statistikkategorier med söktermer (befolkning, ekonomi, miljö, arbetsmarknad, utbildning, boende)
+  - Arbetsflödesmallar för vanliga uppgifter
+  - Tips för effektiv användning
+
+- **Förbättrad server-beskrivning** - MCP-servern inkluderar nu:
+  - Snabbstartsinstruktioner i server metadata
+  - Regionkodsformat (län vs kommun)
+  - Lista över tillgängliga kategorier
+  - Information om databasinnehåll (312 regioner)
+
+### Ändrat
+- **`scb_search_regions` använder lokal databas** - Söker nu direkt i komplett regionsdatabas istället för API
+- **`scb_find_region_code` förbättrad** - Prioriterar lokal databas, använder API endast för tabellspecifik verifiering
+- **Bättre felmeddelanden** - Visar antal regioner i databasen och exempelregioner vid misslyckad sökning
+
+### Tekniskt
+- Alla 290 kommuner och 21 län verifierade mot SCB:s officiella regionkoder
+- Inkluderar länstillhörighet för alla kommuner
+- Exporterar hjälpfunktioner: `searchRegions()`, `findRegion()`, `getMunicipalitiesInCounty()`
+
 ## [2.5.0] - 2025-11-28
 
 ### Kritiskt
